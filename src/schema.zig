@@ -290,3 +290,86 @@ pub fn readTableRows(allocator: std.mem.Allocator, file: *std.fs.File, page_size
         }
     }
 }
+
+pub fn readTableRowsMultiColumn(allocator: std.mem.Allocator, file: *std.fs.File, page_size: u16, rootpage: u32, column_indices: []const usize, stdout: anytype) !void {
+    if (rootpage == 0) return;
+
+    const page_offset = (rootpage - 1) * @as(u64, page_size);
+    var page_data = try allocator.alloc(u8, page_size);
+    defer allocator.free(page_data);
+
+    _ = try file.seekTo(page_offset);
+    _ = try file.read(page_data);
+
+    const page_type = page_data[0];
+    if (page_type != 0x0d) return;
+
+    const num_cells = std.mem.readInt(u16, page_data[3..5], .big);
+
+    var cell_pointers = try allocator.alloc(u16, num_cells);
+    defer allocator.free(cell_pointers);
+
+    for (0..num_cells) |i| {
+        const offset = 8 + i * 2;
+        const cell_ptr_bytes = page_data[offset .. offset + 2];
+        cell_pointers[i] = std.mem.readInt(u16, cell_ptr_bytes[0..2], .big);
+    }
+
+    for (0..num_cells) |i| {
+        const cell_data = page_data[cell_pointers[i]..];
+
+        var parsed = varint.parse(cell_data);
+        var pos = parsed.len;
+
+        parsed = varint.parse(cell_data[pos..]);
+        pos += parsed.len;
+
+        const record_data = cell_data[pos..];
+        parsed = varint.parse(record_data);
+        const header_size = parsed.value;
+        var header_pos = parsed.len;
+
+        var serial_types = std.ArrayList(u64){};
+        defer serial_types.deinit(allocator);
+
+        while (header_pos < header_size) {
+            parsed = varint.parse(record_data[header_pos..]);
+            try serial_types.append(allocator, parsed.value);
+            header_pos += parsed.len;
+        }
+
+        // For each requested column
+        for (column_indices, 0..) |column_idx, col_num| {
+            // Calculate position for this column
+            var body_pos: usize = header_size;
+            for (0..column_idx) |col| {
+                if (col >= serial_types.items.len) break;
+                const st = serial_types.items[col];
+                if (st >= 13 and (st % 2) == 1) {
+                    body_pos += (st - 13) / 2;
+                } else if (st >= 1 and st <= 6) {
+                    const int_result = record.readInt(record_data[body_pos..], st);
+                    body_pos += int_result.len;
+                }
+            }
+
+            // Print separator if not first column
+            if (col_num > 0) {
+                try stdout.print("|", .{});
+            }
+
+            // Read and print the column value
+            if (column_idx < serial_types.items.len) {
+                const st = serial_types.items[column_idx];
+                if (st >= 13 and (st % 2) == 1) {
+                    const str_result = record.readString(record_data[body_pos..], st);
+                    try stdout.print("{s}", .{str_result.value});
+                } else if (st >= 1 and st <= 6) {
+                    const int_result = record.readInt(record_data[body_pos..], st);
+                    try stdout.print("{}", .{int_result.value});
+                }
+            }
+        }
+        try stdout.print("\n", .{});
+    }
+}
