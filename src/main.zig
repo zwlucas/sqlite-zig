@@ -48,9 +48,36 @@ pub fn main() !void {
         const select_len: usize = 6; // length of "SELECT" or "select"
         const column_part = std.mem.trim(u8, args[2][select_len..from_idx], " \t\n");
 
-        // Extract table name (after FROM)
+        // Find WHERE clause if it exists
+        const where_idx_upper = std.mem.indexOf(u8, args[2][from_idx..], "WHERE");
+        const where_idx_lower = std.mem.indexOf(u8, args[2][from_idx..], "where");
+        const where_idx_rel = where_idx_upper orelse where_idx_lower;
+
+        // Extract table name (after FROM, before WHERE if exists)
         const from_end = from_idx + 4; // length of "FROM"
-        const table_name = std.mem.trim(u8, args[2][from_end..], " \t\n");
+        const table_end = if (where_idx_rel) |idx| from_idx + idx else args[2].len;
+        const table_name = std.mem.trim(u8, args[2][from_end..table_end], " \t\n");
+
+        // Parse WHERE clause if it exists
+        var where_column: ?[]const u8 = null;
+        var where_value: ?[]const u8 = null;
+        if (where_idx_rel) |idx| {
+            const where_start = from_idx + idx + 5; // +5 for "WHERE"
+            const where_clause = std.mem.trim(u8, args[2][where_start..], " \t\n");
+
+            // Parse WHERE clause: "column = 'value'"
+            if (std.mem.indexOf(u8, where_clause, "=")) |eq_idx| {
+                where_column = std.mem.trim(u8, where_clause[0..eq_idx], " \t\n");
+                var value_part = std.mem.trim(u8, where_clause[eq_idx + 1 ..], " \t\n");
+
+                // Remove quotes from value
+                if (value_part.len >= 2 and value_part[0] == '\'' and value_part[value_part.len - 1] == '\'') {
+                    where_value = value_part[1 .. value_part.len - 1];
+                } else {
+                    where_value = value_part;
+                }
+            }
+        }
 
         // Check if this is COUNT(*)
         if (std.mem.indexOf(u8, column_part, "count(") != null or std.mem.indexOf(u8, column_part, "COUNT(") != null) {
@@ -75,6 +102,12 @@ pub fn main() !void {
             // Get the table's root page
             const rootpage = try schema.getRootpage(allocator, &file, page_size, table_name);
 
+            // Get WHERE column index if present
+            var where_column_idx: ?usize = null;
+            if (where_column) |col| {
+                where_column_idx = try schema.parseColumnIndex(create_sql, col);
+            }
+
             if (column_list.items.len == 1) {
                 // Single column query
                 const column_idx = try schema.parseColumnIndex(create_sql, column_list.items[0]);
@@ -89,7 +122,7 @@ pub fn main() !void {
                     try column_indices.append(allocator, idx);
                 }
 
-                try schema.readTableRowsMultiColumn(allocator, &file, page_size, rootpage, column_indices.items, stdout);
+                try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
             }
         }
     } else {
