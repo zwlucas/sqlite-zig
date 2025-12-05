@@ -28,6 +28,11 @@ pub fn main() !void {
         _ = try file.read(&buf);
         const page_size = std.mem.readInt(u16, &buf, .big);
         try stdout.print("database page size: {}\n", .{page_size});
+
+        _ = try file.seekTo(103);
+        _ = try file.read(&buf);
+        const num_tables = std.mem.readInt(u16, &buf, .big);
+        try stdout.print("number of tables: {}\n", .{num_tables});
         try stdout.flush();
     }
 }
