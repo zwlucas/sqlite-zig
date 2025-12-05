@@ -3,7 +3,7 @@ const std = @import("std");
 // Learn more about this file here: https://ziglang.org/learn/build-system
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseFast });
-    
+
     const exe = b.addExecutable(.{
         .name = "main",
         .root_module = b.createModule(.{

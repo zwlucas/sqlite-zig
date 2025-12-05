@@ -3,6 +3,8 @@ const varint = @import("varint.zig");
 const record = @import("record.zig");
 const schema = @import("schema.zig");
 const tables = @import("tables.zig");
+const query = @import("query.zig");
+const btree = @import("btree.zig");
 
 var stdout_buffer: [1024]u8 = undefined;
 var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
@@ -82,7 +84,7 @@ pub fn main() !void {
         // Check if this is COUNT(*)
         if (std.mem.indexOf(u8, column_part, "count(") != null or std.mem.indexOf(u8, column_part, "COUNT(") != null) {
             const rootpage = try schema.getRootpage(allocator, &file, page_size, table_name);
-            const row_count = try schema.countRows(allocator, &file, page_size, rootpage);
+            const row_count = try btree.countRows(allocator, &file, page_size, rootpage);
             try stdout.print("{}\n", .{row_count});
         } else {
             // Get the CREATE TABLE statement to find column order
@@ -111,7 +113,7 @@ pub fn main() !void {
             if (column_list.items.len == 1) {
                 // Single column query
                 const column_idx = try schema.parseColumnIndex(create_sql, column_list.items[0]);
-                try schema.readTableRows(allocator, &file, page_size, rootpage, column_idx, stdout);
+                try query.readTableRows(allocator, &file, page_size, rootpage, column_idx, stdout);
             } else {
                 // Multiple column query
                 var column_indices = std.ArrayList(usize){};
@@ -125,16 +127,16 @@ pub fn main() !void {
                 // Try to use index scan if WHERE clause exists
                 if (where_column != null and where_value != null) {
                     // Try index scan first
-                    schema.readTableRowsWithIndex(allocator, &file, page_size, table_name, rootpage, column_indices.items, where_column.?, where_value.?, stdout) catch |err| {
+                    query.readTableRowsWithIndex(allocator, &file, page_size, table_name, rootpage, column_indices.items, where_column.?, where_value.?, stdout) catch |err| {
                         if (err == error.NoIndexFound) {
                             // Fall back to table scan
-                            try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
+                            try query.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
                         } else {
                             return err;
                         }
                     };
                 } else {
-                    try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
+                    try query.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
                 }
             }
         }
@@ -146,7 +148,7 @@ pub fn main() !void {
         }
 
         const rootpage = try schema.getRootpage(allocator, &file, page_size, last_token);
-        const row_count = try schema.countRows(allocator, &file, page_size, rootpage);
+        const row_count = try btree.countRows(allocator, &file, page_size, rootpage);
 
         try stdout.print("{}\n", .{row_count});
     }
