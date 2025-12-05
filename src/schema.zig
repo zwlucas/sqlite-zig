@@ -2,7 +2,6 @@ const std = @import("std");
 const varint = @import("varint.zig");
 const record = @import("record.zig");
 
-<<<<<<< HEAD
 fn getIndexRootpage(allocator: std.mem.Allocator, file: *std.fs.File, page_size: u16, table_name: []const u8, column_name: []const u8) !?u32 {
     var buf: [2]u8 = undefined;
     _ = try file.seekTo(103);
@@ -487,8 +486,6 @@ fn traverseBTree(allocator: std.mem.Allocator, file: *std.fs.File, page_size: u1
     }
 }
 
-=======
->>>>>>> parent of cba3ef1 (codecrafters submit [skip ci])
 pub fn getRootpage(allocator: std.mem.Allocator, file: *std.fs.File, page_size: u16, table_name: []const u8) !u32 {
     var buf: [2]u8 = undefined;
     _ = try file.seekTo(103);
