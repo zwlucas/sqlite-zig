@@ -23,15 +23,11 @@ pub fn main() !void {
         var file = try std.fs.cwd().openFile(database_file_path, .{});
         defer file.close();
 
-        // You can use print statements as follows for debugging, they'll be visible when running tests.
-        std.debug.print("Logs from your program will appear here!\n", .{});
-
-        // TODO: Uncomment the code below to pass the first stage
-        // var buf: [2]u8 = undefined;
-        // _ = try file.seekTo(16);
-        // _ = try file.read(&buf);
-        // const page_size = std.mem.readInt(u16, &buf, .big);
-        // try stdout.print("database page size: {}\n", .{page_size});
-        // try stdout.flush();
+        var buf: [2]u8 = undefined;
+        _ = try file.seekTo(16);
+        _ = try file.read(&buf);
+        const page_size = std.mem.readInt(u16, &buf, .big);
+        try stdout.print("database page size: {}\n", .{page_size});
+        try stdout.flush();
     }
 }
