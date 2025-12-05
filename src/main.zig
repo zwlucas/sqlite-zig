@@ -122,7 +122,20 @@ pub fn main() !void {
                     try column_indices.append(allocator, idx);
                 }
 
-                try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
+                // Try to use index scan if WHERE clause exists
+                if (where_column != null and where_value != null) {
+                    // Try index scan first
+                    schema.readTableRowsWithIndex(allocator, &file, page_size, table_name, rootpage, column_indices.items, where_column.?, where_value.?, stdout) catch |err| {
+                        if (err == error.NoIndexFound) {
+                            // Fall back to table scan
+                            try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
+                        } else {
+                            return err;
+                        }
+                    };
+                } else {
+                    try schema.readTableRowsMultiColumnWhere(allocator, &file, page_size, rootpage, column_indices.items, where_column_idx, where_value, stdout);
+                }
             }
         }
     } else {
